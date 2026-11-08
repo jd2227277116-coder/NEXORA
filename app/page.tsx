@@ -1,6 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import Stories from "./components/Stories";
@@ -43,12 +45,32 @@ type Message = {
   read_at: string | null;
 };
 
+type FriendRequest = {
+  id: number;
+  requester_id: string;
+  recipient_id: string;
+  status: "pending" | "accepted" | "rejected";
+  created_at: string;
+  updated_at: string;
+};
+
+type NotificationItem = {
+  id: number;
+  user_id: string;
+  actor_id: string | null;
+  type: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+};
+
 type PageName =
   | "Inicio"
   | "Descubrir"
   | "Mensajes"
   | "Notificaciones"
   | "Perfil"
+  | "PerfilPublico"
   | "Configuración";
 
 const menu = [
@@ -101,13 +123,128 @@ export default function HomePage() {
   const [profilesById, setProfilesById] =
     useState<Record<string, Profile>>({});
 
+  const [viewingProfile, setViewingProfile] = useState<Profile | null>(null);
+  const [followingIds, setFollowingIds] = useState<string[]>([]);
+  const [followerCounts, setFollowerCounts] = useState<Record<string, number>>({});
+  const [followingCounts, setFollowingCounts] = useState<Record<string, number>>({});
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [themeReady, setThemeReady] = useState(false);
+  const [pushStatus, setPushStatus] = useState("No activadas");
+
 
   const fileRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pushListenersReadyRef = useRef(false);
 
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("nexora-theme");
+
+    if (savedTheme === "dark" || savedTheme === "light") {
+      setTheme(savedTheme);
+    }
+
+    setThemeReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!themeReady) return;
+
+    window.localStorage.setItem("nexora-theme", theme);
+  }, [theme, themeReady]);
+
+  const enablePushNotifications = async () => {
+    if (!user) {
+      notifyError("Debes iniciar sesión para activar las notificaciones.");
+      return;
+    }
+
+    if (!Capacitor.isNativePlatform()) {
+      notifyError("Activa las notificaciones desde la aplicación Android de Nexora.");
+      return;
+    }
+
+    setPushStatus("Activando...");
+
+    try {
+      let permission = await PushNotifications.checkPermissions();
+
+      if (permission.receive !== "granted") {
+        permission = await PushNotifications.requestPermissions();
+      }
+
+      if (permission.receive !== "granted") {
+        setPushStatus("Permiso denegado");
+        notifyError("No se concedió el permiso de notificaciones.");
+        return;
+      }
+
+      if (!pushListenersReadyRef.current) {
+        await PushNotifications.addListener("registration", async (token) => {
+          const { data, error: authError } = await supabase.auth.getUser();
+          const currentUser = data.user;
+
+          if (authError || !currentUser) {
+            setPushStatus("Error");
+            notifyError("No se encontró una sesión activa para guardar el dispositivo.");
+            return;
+          }
+
+          const { error: tokenError } = await supabase
+            .from("device_tokens")
+            .upsert(
+              {
+                user_id: currentUser.id,
+                token: token.value,
+                platform: Capacitor.getPlatform(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,token" }
+            );
+
+          if (tokenError) {
+            setPushStatus("Error al guardar");
+            notifyError("No se pudo guardar el dispositivo: " + tokenError.message);
+            return;
+          }
+
+          setPushStatus("Activas");
+          notifySuccess("El dispositivo quedó registrado para recibir notificaciones.");
+        });
+
+        await PushNotifications.addListener("registrationError", (error) => {
+          setPushStatus("Error");
+          notifyError("Firebase no pudo registrar el dispositivo: " + error.error);
+        });
+
+        await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+          const message = [notification.title, notification.body]
+            .filter(Boolean)
+            .join(": ");
+
+          notifySuccess(message || "Nueva notificación en Nexora.");
+        });
+
+        pushListenersReadyRef.current = true;
+      }
+
+      setPushStatus("Esperando token...");
+      await PushNotifications.register();
+
+    } catch (pushError) {
+      setPushStatus("Error");
+      const message = pushError instanceof Error
+        ? pushError.message
+        : "Error desconocido";
+
+      notifyError("No se pudieron activar las notificaciones: " + message);
+    }
+  };
   const notifyError = (message: string) => {
     setError(message);
     setNotice("");
@@ -259,7 +396,10 @@ export default function HomePage() {
       const currentUser = data.session?.user || null;
       setUser(currentUser);
 
-      if (currentUser) await loadData(currentUser);
+      if (currentUser) {
+        await loadData(currentUser);
+        await loadSocialData(currentUser.id);
+      }
       if (active) setLoading(false);
     }
 
@@ -589,6 +729,225 @@ export default function HomePage() {
     setSearching(false);
   }
 
+  async function loadSocialData(currentUserId: string) {
+    const [followResult, requestResult, notificationResult] =
+      await Promise.all([
+        supabase.from("follows").select("follower_id,following_id"),
+        supabase.from("friend_requests").select("*"),
+        supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", currentUserId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+
+    if (followResult.error) {
+      notifyError("No se pudieron cargar los seguidores.");
+    } else {
+      const rows = followResult.data || [];
+      const followers: Record<string, number> = {};
+      const following: Record<string, number> = {};
+
+      rows.forEach((row: { follower_id: string; following_id: string }) => {
+        followers[row.following_id] = (followers[row.following_id] || 0) + 1;
+        following[row.follower_id] = (following[row.follower_id] || 0) + 1;
+      });
+
+      setFollowingIds(
+        rows
+          .filter((row: { follower_id: string }) => row.follower_id === currentUserId)
+          .map((row: { following_id: string }) => row.following_id)
+      );
+
+      setFollowerCounts(followers);
+      setFollowingCounts(following);
+    }
+
+    if (requestResult.error) {
+      notifyError("No se pudieron cargar las solicitudes de amistad.");
+    } else {
+      const requests = (requestResult.data || []) as FriendRequest[];
+      setFriendRequests(requests);
+
+      const actorIds = [
+        ...new Set(
+          requests
+            .map((request) =>
+              request.requester_id === currentUserId
+                ? request.recipient_id
+                : request.requester_id
+            )
+        ),
+      ];
+
+      if (actorIds.length) {
+        const { data: requestProfiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", actorIds);
+
+        const map: Record<string, Profile> = {};
+        (requestProfiles || []).forEach((profile: Profile) => {
+          map[profile.id] = profile;
+        });
+
+        setProfilesById((previous) => ({ ...previous, ...map }));
+      }
+    }
+
+    if (notificationResult.error) {
+      notifyError("No se pudieron cargar las notificaciones.");
+    } else {
+      const loaded = (notificationResult.data || []) as NotificationItem[];
+      setNotifications(loaded);
+
+      const actorIds = [
+        ...new Set(
+          loaded
+            .map((notification) => notification.actor_id)
+            .filter((id): id is string => !!id)
+        ),
+      ];
+
+      if (actorIds.length) {
+        const { data: actorProfiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", actorIds);
+
+        const map: Record<string, Profile> = {};
+        (actorProfiles || []).forEach((profile: Profile) => {
+          map[profile.id] = profile;
+        });
+
+        setProfilesById((previous) => ({ ...previous, ...map }));
+      }
+    }
+  }
+
+  async function toggleFollow(profileId: string) {
+    if (!user || profileId === user.id) return;
+
+    const isFollowing = followingIds.includes(profileId);
+
+    const result = isFollowing
+      ? await supabase
+          .from("follows")
+          .delete()
+          .eq("follower_id", user.id)
+          .eq("following_id", profileId)
+      : await supabase.from("follows").insert({
+          follower_id: user.id,
+          following_id: profileId,
+        });
+
+    if (result.error) {
+      notifyError("No se pudo actualizar el seguimiento: " + result.error.message);
+      return;
+    }
+
+    await loadSocialData(user.id);
+    notifySuccess(isFollowing ? "Dejaste de seguir a esta persona." : "Ahora sigues a esta persona.");
+  }
+
+  async function sendFriendRequest(profileId: string) {
+    if (!user || profileId === user.id) return;
+
+    const { error: requestError } = await supabase
+      .from("friend_requests")
+      .insert({
+        requester_id: user.id,
+        recipient_id: profileId,
+        status: "pending",
+      });
+
+    if (requestError) {
+      notifyError(
+        requestError.code === "23505"
+          ? "Ya existe una solicitud entre estas cuentas."
+          : "No se pudo enviar la solicitud: " + requestError.message
+      );
+      return;
+    }
+
+    await loadSocialData(user.id);
+    notifySuccess("Solicitud de amistad enviada.");
+  }
+
+  async function respondToFriendRequest(
+    request: FriendRequest,
+    status: "accepted" | "rejected"
+  ) {
+    const currentUser = user;
+    if (!currentUser) {
+      notifyError("Debes iniciar sesión para responder solicitudes.");
+      return;
+    }
+    const { error: updateError } = await supabase
+      .from("friend_requests")
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", request.id)
+      .eq("recipient_id", currentUser.id);
+
+    if (updateError) {
+      notifyError("No se pudo responder la solicitud: " + updateError.message);
+      return;
+    }
+
+    if (status === "accepted") {
+      const { error: followError } = await supabase
+        .from("follows")
+        .upsert(
+          {
+            follower_id: currentUser.id,
+            following_id: request.requester_id,
+          },
+          { onConflict: "follower_id,following_id", ignoreDuplicates: true }
+        );
+
+      if (followError) {
+        notifyError("Solicitud aceptada, pero no se pudo actualizar el seguimiento.");
+      }
+    }
+
+    await loadSocialData(currentUser.id);
+    notifySuccess(status === "accepted" ? "Solicitud aceptada." : "Solicitud rechazada.");
+  }
+
+  async function markNotificationRead(notificationId: number) {
+    const currentUser = user;
+    if (!currentUser) {
+      notifyError("Debes iniciar sesión para actualizar notificaciones.");
+      return;
+    }
+    const { error: updateError } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", notificationId)
+      .eq("user_id", currentUser.id);
+
+    if (updateError) {
+      notifyError("No se pudo marcar la notificación.");
+      return;
+    }
+
+    setNotifications((previous) =>
+      previous.map((item) =>
+        item.id === notificationId ? { ...item, is_read: true } : item
+      )
+    );
+  }
+
+  function openPublicProfile(person: Profile) {
+    setViewingProfile(person);
+    setPage("PerfilPublico");
+    setMobileMenuOpen(false);
+  }
+
   async function openConversation(person: Profile) {
     setSelectedContact(person);
     setPage("Mensajes");
@@ -789,7 +1148,59 @@ export default function HomePage() {
   const myProfile = currentProfile();
 
   return (
-    <main className="min-h-screen bg-[#f5f8fd] text-slate-800 pb-24 md:pb-0">
+    <main className={`min-h-screen bg-[#f5f8fd] text-slate-800 pb-24 md:pb-0 ${theme === "dark" ? "nexora-dark" : ""}`}>
+      <style>{`
+        .nexora-dark {
+          background-color: #0b1220 !important;
+          color: #f8fafc !important;
+          color-scheme: dark;
+        }
+
+        .nexora-dark [class*="bg-white"],
+        .nexora-dark [class*="bg-slate-50"],
+        .nexora-dark [class*="bg-blue-50"],
+        .nexora-dark [class*="bg-sky-100"],
+        .nexora-dark [class*="bg-[#f5f8fd]"] {
+          background-color: #111827 !important;
+          background-image: none !important;
+        }
+
+        .nexora-dark [class*="bg-gradient-to-br"] {
+          background-color: #111827 !important;
+          background-image: none !important;
+        }
+
+        .nexora-dark [class*="text-slate-800"],
+        .nexora-dark [class*="text-slate-700"],
+        .nexora-dark [class*="text-slate-600"],
+        .nexora-dark [class*="text-slate-500"] {
+          color: #e5e7eb !important;
+        }
+
+        .nexora-dark [class*="border-white"],
+        .nexora-dark [class*="border-slate"] {
+          border-color: #374151 !important;
+        }
+
+        .nexora-dark .glass-panel {
+          background-color: #1f2937 !important;
+          color: #f9fafb !important;
+          border-color: #374151 !important;
+        }
+
+        .nexora-dark input,
+        .nexora-dark textarea,
+        .nexora-dark select {
+          background-color: #1f2937 !important;
+          color: #f9fafb !important;
+          border-color: #4b5563 !important;
+        }
+
+        .nexora-dark input::placeholder,
+        .nexora-dark textarea::placeholder {
+          color: #9ca3af !important;
+        }
+      `}</style>
       {/* Fondo decorativo: este contenedor queda cerrado antes del header. */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div className="absolute -top-40 -right-32 w-96 h-96 rounded-full bg-blue-200/30 blur-3xl" />
@@ -1136,12 +1547,26 @@ export default function HomePage() {
                           <p className="font-bold truncate">{person.full_name || "Usuario"}</p>
                           <p className="text-sm text-blue-600">@{person.username || "usuario"}</p>
                         </div>
-                        <button
-                          onClick={() => openConversation(person)}
-                          className="bg-blue-50 text-blue-700 px-3 py-2 rounded-xl text-sm font-bold"
-                        >
-                          Mensaje
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => openPublicProfile(person)}
+                            className="bg-white text-blue-700 border border-blue-100 px-3 py-2 rounded-xl text-sm font-bold"
+                          >
+                            Perfil
+                          </button>
+                          <button
+                            onClick={() => toggleFollow(person.id)}
+                            className="bg-blue-50 text-blue-700 px-3 py-2 rounded-xl text-sm font-bold"
+                          >
+                            {followingIds.includes(person.id) ? "Siguiendo" : "Seguir"}
+                          </button>
+                          <button
+                            onClick={() => openConversation(person)}
+                            className="bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-bold"
+                          >
+                            Mensaje
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1170,6 +1595,123 @@ export default function HomePage() {
                     No encontramos resultados para esa búsqueda.
                   </div>
                 )}
+            </>
+          )}
+
+          {page === "PerfilPublico" && viewingProfile && (
+            <>
+              <div className="mb-7 flex items-center gap-3">
+                <button
+                  onClick={() => navigate("Descubrir")}
+                  className="bg-white border border-slate-100 rounded-xl px-4 py-2 text-blue-600 font-bold"
+                >
+                  Volver
+                </button>
+                <div>
+                  <p className="text-blue-600 text-sm font-bold mb-1">COMUNIDAD</p>
+                  <h1 className="text-3xl sm:text-4xl font-black">Perfil</h1>
+                </div>
+              </div>
+
+              <div className="glass-panel p-6 sm:p-8">
+                <div className="flex flex-col items-center text-center">
+                  <Avatar profile={viewingProfile} size="lg" />
+                  <h2 className="text-2xl font-black mt-4">
+                    {viewingProfile.full_name || "Usuario Nexora"}
+                  </h2>
+                  <p className="text-blue-600">
+                    @{viewingProfile.username || "usuario"}
+                  </p>
+                  <p className="text-slate-600 whitespace-pre-wrap mt-4 max-w-xl">
+                    {viewingProfile.bio || "Esta persona todavía no ha escrito una biografía."}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-7 text-center">
+                  <div className="bg-white/70 rounded-2xl p-4">
+                    <p className="text-2xl font-black">
+                      {followerCounts[viewingProfile.id] || 0}
+                    </p>
+                    <p className="text-sm text-slate-500">Seguidores</p>
+                  </div>
+                  <div className="bg-white/70 rounded-2xl p-4">
+                    <p className="text-2xl font-black">
+                      {followingCounts[viewingProfile.id] || 0}
+                    </p>
+                    <p className="text-sm text-slate-500">Seguidos</p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const relation = friendRequests.find(
+                    (request) =>
+                      (request.requester_id === user.id &&
+                        request.recipient_id === viewingProfile.id) ||
+                      (request.requester_id === viewingProfile.id &&
+                        request.recipient_id === user.id)
+                  );
+
+                  const incoming =
+                    relation?.recipient_id === user.id &&
+                    relation.status === "pending";
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-6">
+                      <button
+                        onClick={() => toggleFollow(viewingProfile.id)}
+                        className="bg-blue-600 text-white rounded-xl p-3 font-bold"
+                      >
+                        {followingIds.includes(viewingProfile.id)
+                          ? "Dejar de seguir"
+                          : "Seguir"}
+                      </button>
+
+                      {!relation && (
+                        <button
+                          onClick={() => sendFriendRequest(viewingProfile.id)}
+                          className="bg-blue-50 text-blue-700 rounded-xl p-3 font-bold"
+                        >
+                          Añadir amigo
+                        </button>
+                      )}
+
+                      {relation?.status === "pending" && !incoming && (
+                        <button
+                          disabled
+                          className="bg-slate-100 text-slate-500 rounded-xl p-3 font-bold"
+                        >
+                          Solicitud enviada
+                        </button>
+                      )}
+
+                      {relation?.status === "accepted" && (
+                        <button
+                          disabled
+                          className="bg-emerald-50 text-emerald-700 rounded-xl p-3 font-bold"
+                        >
+                          Amigos
+                        </button>
+                      )}
+
+                      {incoming && (
+                        <button
+                          onClick={() => respondToFriendRequest(relation, "accepted")}
+                          className="bg-emerald-600 text-white rounded-xl p-3 font-bold"
+                        >
+                          Aceptar solicitud
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => openConversation(viewingProfile)}
+                        className="bg-white border border-blue-100 text-blue-700 rounded-xl p-3 font-bold"
+                      >
+                        Enviar mensaje
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
             </>
           )}
 
@@ -1339,12 +1881,60 @@ export default function HomePage() {
                 <p className="text-blue-600 text-sm font-bold mb-1">ACTIVIDAD</p>
                 <h1 className="text-3xl sm:text-4xl font-black">Notificaciones</h1>
               </div>
-              <div className="glass-panel p-9 text-center">
-                <Bell size={28} className="text-blue-600 mx-auto mb-4" />
-                <p className="font-bold">Todo tranquilo por ahora</p>
-                <p className="text-slate-500 text-sm mt-2">
-                  Aquí aparecerán tus novedades cuando configuremos el sistema de notificaciones.
-                </p>
+              <div className="space-y-3">
+                {notifications.length === 0 ? (
+                  <div className="glass-panel p-9 text-center">
+                    <Bell size={28} className="text-blue-600 mx-auto mb-4" />
+                    <p className="font-bold">Todo tranquilo por ahora</p>
+                    <p className="text-slate-500 text-sm mt-2">
+                      Cuando tengas novedades, aparecerán aquí.
+                    </p>
+                  </div>
+                ) : (
+                  notifications.map((notification) => {
+                    const actor = notification.actor_id
+                      ? profilesById[notification.actor_id]
+                      : null;
+
+                    return (
+                      <div
+                        key={notification.id}
+                        className={`glass-panel p-4 flex items-start gap-3 ${
+                          notification.is_read ? "opacity-70" : "border-blue-300"
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                          <Bell size={19} />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm">
+                            {actor?.full_name || actor?.username || "Nexora"}
+                          </p>
+                          <p className="text-sm text-slate-600 mt-1">
+                            {notification.content}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-2">
+                            {new Date(notification.created_at).toLocaleString()}
+                          </p>
+
+                          {!notification.is_read && (
+                            <button
+                              onClick={() => markNotificationRead(notification.id)}
+                              className="text-blue-600 text-xs font-bold mt-2"
+                            >
+                              Marcar como leída
+                            </button>
+                          )}
+                        </div>
+
+                        {!notification.is_read && (
+                          <span className="w-2 h-2 rounded-full bg-blue-600 mt-2 shrink-0" />
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </>
           )}
@@ -1355,7 +1945,88 @@ export default function HomePage() {
                 <p className="text-blue-600 text-sm font-bold mb-1">PREFERENCIAS</p>
                 <h1 className="text-3xl sm:text-4xl font-black">Configuración</h1>
               </div>
+              <div className="glass-panel p-6 mb-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <Sparkles size={22} />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-lg">Apariencia</h2>
+                    <p className="text-sm text-slate-500">
+                      Personaliza cómo se ve Nexora.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    aria-pressed={theme === "light"}
+                    onClick={() => setTheme("light")}
+                    className={`rounded-xl border px-4 py-4 font-bold transition ${
+                      theme === "light"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    <span className="block text-2xl mb-2">☀</span>
+                    Modo claro
+                    {theme === "light" && (
+                      <span className="block text-xs mt-1">Activado</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-pressed={theme === "dark"}
+                    onClick={() => setTheme("dark")}
+                    className={`rounded-xl border px-4 py-4 font-bold transition ${
+                      theme === "dark"
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    <span className="block text-2xl mb-2">☾</span>
+                    Modo oscuro
+                    {theme === "dark" && (
+                      <span className="block text-xs mt-1">Activado</span>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-xs text-slate-500 mt-4">
+                  Tu elección se guarda en este dispositivo.
+                </p>
+              </div>
+
               <div className="glass-panel p-6">
+                <div className="glass-panel p-6 mb-5">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                      <Bell size={22} />
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-lg">Notificaciones</h2>
+                      <p className="text-sm text-slate-500">
+                        Recibe avisos de Nexora en tu dispositivo.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={enablePushNotifications}
+                    disabled={pushStatus === "Activando..." || pushStatus === "Esperando token..."}
+                    className="w-full rounded-xl bg-blue-600 text-white font-bold px-4 py-3 disabled:opacity-50"
+                  >
+                    <Bell size={18} className="inline mr-2" />
+                    {pushStatus === "Activas" ? "Actualizar registro" : "Activar notificaciones"}
+                  </button>
+
+                  <p className="text-xs text-slate-500 mt-3">
+                    Estado: {pushStatus}
+                  </p>
+                </div>
                 <p className="font-bold">Cuenta de Nexora</p>
                 <p className="text-sm text-slate-500 mt-2">{user.email}</p>
                 <button
