@@ -1,0 +1,448 @@
+
+      sm: "w-9 h-9 text-sm",
+      md: "w-11 h-11 text-base",
+      lg: "w-24 h-24 text-3xl",
+    };
+
+    const initials = (profile?.full_name || "N")
+      .slice(0, 1)
+      .toUpperCase();
+
+    return (
+      <div
+        className={`${dimensions[size]} shrink-0 rounded-full overflow-hidden bg-gradient-to-br from-blue-100 to-sky-50 text-blue-600 flex items-center justify-center font-bold ring-1 ring-blue-100`}
+      >
+        {profile?.avatar_url ? (
+          <img
+            src={profile.avatar_url}
+            alt="Avatar"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          initials
+        )}
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-white/80 backdrop-blur-xl border border-white shadow-xl flex items-center justify-center text-blue-600 mb-4">
+            <Sparkles size={30} />
+          </div>
+          <LoaderCircle className="animate-spin text-blue-500 mx-auto" />
+          <p className="text-slate-500 text-sm mt-3">Iniciando Nexora...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-white via-blue-50 to-slate-100 flex items-center justify-center p-5">
+        <div className="w-full max-w-md bg-white/70 backdrop-blur-2xl border border-white shadow-2xl shadow-blue-100/60 rounded-[2rem] p-7 sm:p-9">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-sky-400 text-white flex items-center justify-center shadow-lg shadow-blue-200 mb-6">
+            <Sparkles size={32} />
+          </div>
+
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">
+            Nexora<span className="text-blue-600">.</span>
+          </h1>
+
+          <p className="text-slate-500 mt-2 mb-8">
+            Conecta, comparte y descubre.
+          </p>
+
+          {register && (
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Nombre completo"
+              className="glass-input mb-3"
+            />
+          )}
+
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Correo electrónico"
+            className="glass-input mb-3"
+          />
+
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Contraseña"
+            className="glass-input mb-4"
+          />
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 p-3 rounded-xl mb-4">
+              {error}
+            </p>
+          )}
+
+          {notice && (
+            <p className="text-sm text-emerald-700 bg-emerald-50 p-3 rounded-xl mb-4">
+              {notice}
+            </p>
+          )}
+
+          <button
+            onClick={handleAuth}
+            disabled={saving || !email.trim() || !password}
+            className="w-full rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 shadow-lg shadow-blue-200 disabled:opacity-50 transition"
+          >
+            {saving
+              ? "Un momento..."
+              : register
+                ? "Crear cuenta"
+                : "Iniciar sesión"}
+          </button>
+
+          <button
+            onClick={() => {
+              setRegister(!register);
+              setError("");
+            }}
+            className="w-full text-blue-600 font-semibold mt-5"
+          >
+            {register
+              ? "Ya tengo una cuenta"
+              : "Crear una cuenta nueva"}
+          </button>
+        </div>
+
+        <style jsx global>{`
+          .glass-input {
+            width: 100%;
+            padding: 15px 17px;
+            border-radius: 15px;
+            outline: none;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: #0f172a;
+          }
+          .glass-input:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+          }
+        `}</style>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f5f8fd] text-slate-800">
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 -right-32 w-96 h-96 rounded-full bg-blue-200/30 blur-3xl" />
+        <div className="absolute top-1/2 -left-40 w-96 h-96 rounded-full bg-sky-100/50 blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-white/80 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-[72px] flex items-center justify-between">
+          <button
+            onClick={() => navigate("Inicio")}
+            className="flex items-center gap-2"
+          >
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-sky-400 flex items-center justify-center text-white shadow-md shadow-blue-200">
+              <Sparkles size={22} />
+            </div>
+            <span className="text-2xl font-black tracking-tight">
+              Nexora<span className="text-blue-600">.</span>
+            </span>
+          </button>
+
+          <div className="hidden md:flex items-center gap-2 text-sm text-slate-500">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full" />
+            Tu espacio social
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("Perfil")}
+              className="flex items-center gap-2 rounded-full bg-white/80 border border-white shadow-sm p-1.5 pr-3 hover:bg-white transition"
+            >
+              <Avatar
+                profile={{
+                  id: user.id,
+                  username,
+                  full_name: name,
+                  bio,
+                  avatar_url: avatar,
+                }}
+                size="sm"
+              />
+              <span className="hidden sm:block text-sm font-semibold max-w-28 truncate">
+                {name || "Mi perfil"}
+              </span>
+            </button>
+
+            <button
+              onClick={logout}
+              title="Cerrar sesión"
+              className="w-10 h-10 rounded-full bg-white/80 border border-white shadow-sm flex items-center justify-center text-slate-500 hover:text-red-500"
+            >
+              <LogOut size={18} />
+            </button>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden w-10 h-10 rounded-full bg-white/80 border border-white flex items-center justify-center"
+            >
+              {mobileMenuOpen ? <X size={20} /> : <MenuIcon size={20} />}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-x-3 top-[80px] z-50 bg-white/90 backdrop-blur-2xl border border-white shadow-xl rounded-3xl p-3">
+          {menu.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                onClick={() => navigate(item.label)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover:bg-blue-50"
+              >
+                <Icon size={20} className="text-blue-600" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="relative max-w-7xl mx-auto px-3 sm:px-6 py-6 md:py-8 grid grid-cols-1 md:grid-cols-[230px_minmax(0,1fr)] gap-6">
+        <aside className="hidden md:block">
+          <div className="sticky top-24 bg-white/65 backdrop-blur-2xl border border-white rounded-3xl p-3 shadow-lg shadow-slate-200/30">
+            <div className="p-3 mb-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Menú principal
+              </p>
+            </div>
+
+            {menu.map((item) => {
+              const Icon = item.icon;
+              const active = page === item.label;
+
+              return (
+                <button
+                  key={item.label}
+                  onClick={() => navigate(item.label)}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl mb-1 transition ${
+                    active
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                      : "text-slate-500 hover:bg-white hover:text-blue-600"
+                  }`}
+                >
+                  <Icon size={20} />
+                  <span className="font-semibold">{item.label}</span>
+                </button>
+              );
+            })}
+
+            <div className="mt-5 p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-white border border-blue-50">
+              <Sparkles className="text-blue-500 mb-2" size={21} />
+              <p className="font-bold text-sm">Bienvenido a Nexora</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Tu comunidad, tus ideas, tus conexiones.
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        <section className="min-w-0">
+          {error && (
+            <div className="mb-5 p-4 rounded-2xl bg-red-50/90 border border-red-100 text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          {notice && (
+            <div className="mb-5 p-4 rounded-2xl bg-emerald-50/90 border border-emerald-100 text-emerald-700 text-sm">
+              {notice}
+            </div>
+          )}
+
+          {page === "Inicio" && (
+            <>
+              <div className="mb-7">
+                <p className="text-blue-600 text-sm font-bold mb-1">
+                  TU COMUNIDAD
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+                  Inicio
+                </h1>
+                <p className="text-slate-500 mt-2">
+                  Esto está pasando en Nexora.
+                </p>
+              </div>
+
+              <div className="glass-panel p-4 sm:p-6 mb-7">
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar
+                    profile={{
+                      id: user.id,
+                      username,
+                      full_name: name,
+                      bio,
+                      avatar_url: avatar,
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">{name}</p>
+                    <p className="text-xs text-slate-500">@{username}</p>
+                  </div>
+                </div>
+
+                <textarea
+                  value={postText}
+                  onChange={(e) => setPostText(e.target.value)}
+                  placeholder="¿Qué quieres compartir hoy?"
+                  className="w-full min-h-32 resize-y bg-white/70 border border-white rounded-2xl p-4 outline-none focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400"
+                />
+
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-xs text-slate-400">
+                    Comparte algo con tu comunidad.
+                  </span>
+                  <button
+                    onClick={publish}
+                    disabled={saving || !postText.trim()}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 disabled:opacity-50"
+                  >
+                    <Send size={17} />
+                    Publicar
+                  </button>
+                </div>
+              </div>
+
+              <h2 className="font-black text-xl mb-4">Tu feed</h2>
+
+              {posts.length === 0 && (
+                <div className="glass-panel p-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles size={28} />
+                  </div>
+                  <p className="font-bold">Todavía no hay publicaciones.</p>
+                  <p className="text-sm text-slate-500 mt-2">
+                    ¡Comparte la primera!
+                  </p>
+                </div>
+              )}
+
+              {posts.map((post) => {
+                const author = getProfile(post.user_id);
+                const comments = commentsByPost[post.id] || [];
+                const liked = likedPosts.includes(post.id);
+                const expanded = !!expandedComments[post.id];
+
+                return (
+                  <article
+                    key={post.id}
+                    className="glass-panel p-4 sm:p-6 mb-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar profile={author} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold truncate">
+                          {author?.full_name || "Usuario Nexora"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {author?.username
+                            ? `@${author.username} · `
+                            : ""}
+                          {new Date(post.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="my-5 whitespace-pre-wrap leading-relaxed break-words">
+                      {post.content}
+                    </p>
+
+                    <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
+                      <button
+                        onClick={() => toggleLike(post.id)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl transition ${
+                          liked
+                            ? "bg-rose-50 text-rose-600"
+                            : "text-slate-500 hover:bg-rose-50 hover:text-rose-500"
+                        }`}
+                      >
+                        <Heart
+                          size={19}
+                          fill={liked ? "currentColor" : "none"}
+                        />
+                        <span className="text-sm font-semibold">
+                          Me gusta {likesByPost[post.id] || 0}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          setExpandedComments((previous) => ({
+                            ...previous,
+                            [post.id]: !previous[post.id],
+                          }));
+                          await loadComments(post.id);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-500 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        <MessageCircle size={19} />
+                        <span className="text-sm font-semibold">
+                          {comments.length} comentarios
+                        </span>
+                      </button>
+                    </div>
+
+                    {expanded && (
+                      <div className="mt-4 border-t border-slate-100 pt-4">
+                        <div className="flex gap-2 mb-4">
+                          <input
+                            value={commentDrafts[post.id] || ""}
+                            onChange={(e) =>
+                              setCommentDrafts((previous) => ({
+                                ...previous,
+                                [post.id]: e.target.value,
+                              }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") addComment(post.id);
+                            }}
+                            placeholder="Escribe un comentario..."
+                            className="flex-1 min-w-0 bg-white/80 border border-slate-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                          <button
+                            onClick={() => addComment(post.id)}
+                            disabled={!(commentDrafts[post.id] || "").trim()}
+                            className="bg-blue-600 text-white px-4 rounded-xl disabled:opacity-50"
+                          >
+                            <Send size={18} />
+                          </button>
+                        </div>
+
+                        {comments.length === 0 && (
+                          <p className="text-sm text-slate-400 text-center py-3">
+                            Todavía no hay comentarios.
+                          </p>
+                        )}
+
+                        <div className="space-y-3">
+                          {comments.map((comment) => {
+                            const commentAuthor =
+                              getProfile(comment.user_id);
+                            const canDelete =
+                              comment.user_id === user.id ||
+                              post.user_id === user.id;
+
+                            return (
+                              <div
+                                key={comment.id}
+                  

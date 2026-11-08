@@ -1,0 +1,449 @@
+              className="flex gap-2 items-start"
+                              >
+                                <Avatar
+                                  profile={commentAuthor}
+                                  size="sm"
+                                />
+                                <div className="flex-1 min-w-0 bg-white/70 rounded-2xl p-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="font-bold text-sm truncate">
+                                      {commentAuthor?.full_name ||
+                                        "Usuario Nexora"}
+                                    </p>
+                                    {canDelete && (
+                                      <button
+                                        onClick={() =>
+                                          deleteComment(comment)
+                                        }
+                                        title="Eliminar comentario"
+                                        className="text-slate-400 hover:text-red-500"
+                                      >
+                                        <Trash2 size={15} />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap break-words mt-1">
+                                    {comment.content}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 mt-2">
+                                    {new Date(
+                                      comment.created_at
+                                    ).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </>
+          )}
+
+          {page === "Descubrir" && (
+            <>
+              <div className="mb-7">
+                <p className="text-blue-600 text-sm font-bold mb-1">
+                  EXPLORA
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-black">
+                  Descubrir
+                </h1>
+                <p className="text-slate-500 mt-2">
+                  Encuentra personas y publicaciones.
+                </p>
+              </div>
+
+              <div className="glass-panel p-3 flex gap-2 mb-6">
+                <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                  <Search className="text-slate-400 shrink-0" size={20} />
+                  <input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") searchUsers();
+                    }}
+                    placeholder="Buscar personas o publicaciones..."
+                    className="w-full min-w-0 bg-transparent outline-none py-2"
+                  />
+                </div>
+                <button
+                  onClick={searchUsers}
+                  disabled={searching}
+                  className="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold disabled:opacity-50"
+                >
+                  {searching ? "..." : "Buscar"}
+                </button>
+              </div>
+
+              {searchResults.length > 0 && (
+                <>
+                  <h2 className="font-bold text-lg mb-3">
+                    Personas
+                  </h2>
+                  <div className="space-y-3 mb-7">
+                    {searchResults.map((person) => (
+                      <div
+                        key={person.id}
+                        className="glass-panel p-4 flex items-center gap-3"
+                      >
+                        <Avatar profile={person} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold truncate">
+                            {person.full_name || "Usuario"}
+                          </p>
+                          <p className="text-sm text-blue-600">
+                            @{person.username || "usuario"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => openConversation(person)}
+                          className="bg-blue-50 text-blue-700 px-3 py-2 rounded-xl text-sm font-bold"
+                        >
+                          Mensaje
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {postResults.length > 0 && (
+                <>
+                  <h2 className="font-bold text-lg mb-3">
+                    Publicaciones
+                  </h2>
+                  <div className="space-y-3">
+                    {postResults.map((post) => {
+                      const author = getProfile(post.user_id);
+
+                      return (
+                        <div key={post.id} className="glass-panel p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Avatar profile={author} size="sm" />
+                            <span className="font-bold text-sm">
+                              {author?.full_name || "Usuario Nexora"}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap break-words">
+                            {post.content}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {searchTerm.trim() &&
+                !searching &&
+                searchResults.length === 0 &&
+                postResults.length === 0 && (
+                  <div className="glass-panel p-8 text-center text-slate-500">
+                    No encontramos resultados para esa búsqueda.
+                  </div>
+                )}
+            </>
+          )}
+
+          {page === "Perfil" && (
+            <>
+              <div className="mb-7">
+                <p className="text-blue-600 text-sm font-bold mb-1">
+                  TU ESPACIO
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-black">
+                  Mi perfil
+                </h1>
+              </div>
+
+              <div className="glass-panel p-5 sm:p-8">
+                <div className="flex flex-col items-center mb-7">
+                  <Avatar
+                    profile={{
+                      id: user.id,
+                      username,
+                      full_name: name,
+                      bio,
+                      avatar_url: avatar,
+                    }}
+                    size="lg"
+                  />
+
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex items-center gap-2 text-blue-600 font-bold mt-4"
+                  >
+                    <Camera size={17} />
+                    Cambiar fotografía
+                  </button>
+
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadAvatar(file);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </div>
+
+                <p className="text-sm text-slate-500 mb-6 text-center">
+                  {user.email}
+                </p>
+
+                <label className="block text-sm font-bold mb-2">
+                  Nombre de usuario único
+                </label>
+                <div className="flex items-center bg-white/70 border border-slate-100 rounded-xl px-4 mb-2">
+                  <AtSign size={17} className="text-blue-600" />
+                  <input
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    maxLength={20}
+                    className="w-full bg-transparent p-4 outline-none"
+                    placeholder="tu_usuario"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mb-5">
+                  Entre 3 y 20 caracteres. Sin espacios.
+                </p>
+
+                <label className="block text-sm font-bold mb-2">
+                  Nombre completo
+                </label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-white/70 border border-slate-100 p-4 rounded-xl mb-5 outline-none focus:ring-2 focus:ring-blue-100"
+                />
+
+                <label className="block text-sm font-bold mb-2">
+                  Biografía
+                </label>
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  className="w-full bg-white/70 border border-slate-100 p-4 rounded-xl min-h-28 outline-none focus:ring-2 focus:ring-blue-100"
+                  placeholder="Cuéntale algo a tu comunidad..."
+                />
+
+                <button
+                  onClick={saveProfile}
+                  disabled={saving}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-xl font-bold mt-5 disabled:opacity-50"
+                >
+                  {saving ? "Guardando..." : "Guardar cambios"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {page === "Mensajes" && (
+            <>
+              <div className="mb-7">
+                <p className="text-blue-600 text-sm font-bold mb-1">
+                  CONECTA
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-black">
+                  Mensajes
+                </h1>
+              </div>
+
+              {!selectedContact ? (
+                <div className="glass-panel p-8 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare size={30} />
+                  </div>
+                  <p className="font-bold text-lg">
+                    Tus conversaciones
+                  </p>
+                  <p className="text-slate-500 text-sm mt-2">
+                    Busca personas en Descubrir para iniciar una conversación.
+                  </p>
+                  <button
+                    onClick={() => navigate("Descubrir")}
+                    className="bg-blue-600 text-white px-5 py-3 rounded-xl mt-5 font-bold"
+                  >
+                    Descubrir personas
+                  </button>
+                </div>
+              ) : (
+                <div className="glass-panel overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedContact(null)}
+                      className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"
+                    >
+                      <X size={18} />
+                    </button>
+                    <Avatar profile={selectedContact} size="sm" />
+                    <div className="min-w-0">
+                      <p className="font-bold truncate">
+                        {selectedContact.full_name}
+                      </p>
+                      <p className="text-xs text-blue-600">
+                        @{selectedContact.username}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 h-[55vh] min-h-64 overflow-y-auto space-y-3">
+                    {messages.length === 0 && (
+                      <p className="text-center text-sm text-slate-400 py-10">
+                        Esta conversación está vacía. ¡Saluda!
+                      </p>
+                    )}
+
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${
+                          message.sender_id === user.id
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}
+                      >
+                        <div
+                          className={`max-w-[82%] p-3 rounded-2xl ${
+                            message.sender_id === user.id
+                              ? "bg-blue-600 text-white rounded-br-sm"
+                              : "bg-white text-slate-800 rounded-bl-sm border border-slate-100"
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">
+                            {message.content}
+                          </p>
+                          <p className="text-[10px] opacity-70 mt-1">
+                            {new Date(
+                              message.created_at
+                            ).toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <div className="p-3 border-t border-slate-100 flex gap-2">
+                    <input
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") sendMessage();
+                      }}
+                      placeholder="Escribe un mensaje..."
+                      className="flex-1 min-w-0 bg-white/80 border border-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={!messageText.trim()}
+                      className="bg-blue-600 text-white px-5 rounded-xl font-bold disabled:opacity-50"
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {page === "Notificaciones" && (
+            <>
+              <div className="mb-7">
+                <p className="text-blue-600 text-sm font-bold mb-1">
+                  ACTIVIDAD
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-black">
+                  Notificaciones
+                </h1>
+              </div>
+
+              <div className="glass-panel p-9 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4">
+                  <Bell size={28} />
+                </div>
+                <p className="font-bold">
+                  Todo tranquilo por ahora
+                </p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Aquí aparecerán tus novedades.
+                </p>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/75 backdrop-blur-2xl border-t border-white/90 px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] shadow-[0_-8px_30px_rgba(15,23,42,0.06)]">
+        <div className="max-w-lg mx-auto flex justify-around">
+          {menu.map((item) => {
+            const Icon = item.icon;
+            const active = page === item.label;
+
+            return (
+              <button
+                key={item.label}
+                onClick={() => navigate(item.label)}
+                className={`flex flex-col items-center gap-1 min-w-0 flex-1 py-1 text-xs transition ${
+                  active
+                    ? "text-blue-600 font-bold"
+                    : "text-slate-400"
+                }`}
+              >
+                <span
+                  className={`w-10 h-8 rounded-xl flex items-center justify-center ${
+                    active ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <Icon size={21} strokeWidth={active ? 2.5 : 1.8} />
+                </span>
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <style jsx global>{`
+        .glass-panel {
+          background: rgba(255, 255, 255, 0.72);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          border: 1px solid rgba(255, 255, 255, 0.95);
+          border-radius: 24px;
+          box-shadow:
+            0 10px 35px rgba(15, 23, 42, 0.045),
+            inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        input,
+        textarea,
+        button {
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        button {
+          transition:
+            background-color 0.18s ease,
+            color 0.18s ease,
+            transform 0.18s ease;
+        }
+
+        button:active {
+          transform: scale(0.98);
+        }
+
+        body {
+          background: #f5f8fd;
+        }
+      `}</style>
+    </main>
+  );
+}
